@@ -1,16 +1,16 @@
 import numpy as np
-import operator
+import sys
 import random
 import json
 import pika
 import time
-from scoop import futures, logger
-
+from scoop import logger, futures, launcher
 NUMBER_OF_GENERATIONS = 100
 POPULATION_SIZE = 10
 CHROMOSOME_SIZE = 4
 KNAPSACK_SIZE = 30
 NUM_OF_NEIGHBOURS = 2
+
 
 class Collect(object):
     def __init__(self):
@@ -24,10 +24,11 @@ class Collect(object):
         return self._objects.append(obj)
 
     def sort_objects(self):
-        return sorted(self._objects, key=lambda x: x.fit, reverse=False)
+        return sorted(self._objects, key=lambda x: x.fit, reverse=True)
 
     def size_of_col(self):
         return len(self._objects)
+
 
 class Snt(object):
     def __init__(self, fit, chromosome):
@@ -47,6 +48,7 @@ class Snt(object):
 
     def __repr__(self):
         return self.__str__()
+
 
 class Item(object):
     def __init__(self, volume, weight, name):
@@ -89,7 +91,7 @@ def gen_individual():
     Generate binary array
     :return: individual's chromosome
     """
-    return np.random.randint(2, size=(CHROMOSOME_SIZE))
+    return np.random.randint(2, size=CHROMOSOME_SIZE)
 
 
 def crossover(father, mother):
@@ -132,6 +134,7 @@ def fitness(chromosome):
         volume_value = volume_value + chromosome[i] * items.get(i).volume
     return fitness_value if volume_value <= KNAPSACK_SIZE else 0
 
+
 def find_solution(population):
     """
     Find the best solution
@@ -142,7 +145,7 @@ def find_solution(population):
     max_index = None
     for i in range(0, POPULATION_SIZE):
         curr_fit = fitness(population[i])
-        if (curr_fit > max_val):
+        if curr_fit > max_val:
             max_val = curr_fit
             max_index = i
     return max_val, population[max_index]
@@ -211,15 +214,24 @@ def process(chromosome, channels):
     return fit, chromosome
 
 
+def initialize_topology(quantity, radius):
+    channels_to_return = []
+    for x in range(quantity):
+        channels = [x]
+        for z in range(1, radius + 1):
+            if x+z > quantity - 1:
+                channels.append(abs(quantity-(x+z)))
+            else:
+                channels.append(x+z)
+            if x-z < 0:
+                channels.append(abs((x-z) + quantity))
+            else:
+                channels.append(x-z)
+        channels_to_return.append(channels)
+    return channels_to_return
+
+
 if __name__ == '__main__':
-    arr = []
-    one = ["1", "2", "3"]
-    two = ["2", "1", "3"]
-    three = ["3", "1", "2"]
-    arr.append(one)
-    arr.append(two)
-    arr.append(three)
-
+    arr = initialize_topology(100, 10)
     popula = initialize_population()
-
     logger.info("END " + str(list(futures.map(process, popula, arr))))
