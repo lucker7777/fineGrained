@@ -4,7 +4,11 @@ import random
 import json
 import pika
 import time
+import threading
+import os
+import re
 from scoop import logger, futures, launcher, utils
+from scoop.launcher import ScoopApp, Host
 NUMBER_OF_GENERATIONS = 100
 POPULATION_SIZE = 10
 CHROMOSOME_SIZE = 4
@@ -231,7 +235,40 @@ def initialize_topology(quantity, radius):
     return channels_to_return
 
 
-if __name__ == '__main__':
-    arr = initialize_topology(10, 2)
-    popula = initialize_population()
-    logger.info("END " + str(list(futures.map(process, popula, arr))))
+def parallel(hosts_list, num_of_workers):
+    # Get a list of resources to launch worker(s) on
+    hosts = utils.getHosts(None, hosts_list)
+    external_hostname = [utils.externalHostname(hosts)]
+    # Launch SCOOP
+    print(sys.executable)
+    thisScoopApp = ScoopApp(hosts=hosts, n=num_of_workers, b=1,
+                            verbose=4,
+                            python_executable=[sys.executable],
+                            externalHostname=external_hostname[0],
+                            executable="toRun.py",
+                            arguments=None,
+                            tunnel=False,
+                            path="/home/martin/PycharmProjects/fineGrained/main/",
+                            debug=False,
+                            nice=None,
+                            env=utils.getEnv(),
+                            profile=None,
+                            pythonPath=None,
+                            prolog=None, backend='ZMQ')
+
+    rootTaskExitCode = False
+    interruptPreventer = threading.Thread(target=thisScoopApp.close)
+    try:
+        rootTaskExitCode = thisScoopApp.run()
+    except Exception as e:
+        logger.error('Error while launching SCOOP subprocesses:' + str(e))
+        rootTaskExitCode = -1
+    finally:
+        # This should not be interrupted (ie. by a KeyboadInterrupt)
+        # The only cross-platform way to do it I found was by using a thread.
+        interruptPreventer.start()
+        interruptPreventer.join()
+
+    # Exit with the proper exit code
+    if rootTaskExitCode:
+        sys.exit(rootTaskExitCode)
